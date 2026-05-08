@@ -1,0 +1,63 @@
+version: "3.9"
+# Development overrides — use with:
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      target: base
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+    volumes:
+      - ./backend:/app
+    environment:
+      ENV: development
+      DEBUG: "true"
+      LOG_FORMAT: console
+      LOG_LEVEL: DEBUG
+      DATABASE_ECHO: "false"
+    ports:
+      - "8000:8000"
+
+  worker:
+    volumes:
+      - ./backend:/app
+    environment:
+      ENV: development
+      LOG_LEVEL: DEBUG
+
+  beat:
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      target: deps
+    command: ["npm", "run", "dev"]
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+
+  # Flower for Celery monitoring in dev
+  flower:
+    image: mher/flower:2.0
+    container_name: corepulse-flower
+    command: ["celery", "flower", "--broker=redis://redis:6379/0", "--port=5555"]
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    networks: [corepulse]
